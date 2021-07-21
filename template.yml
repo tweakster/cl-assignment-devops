@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  DomainName:
+    Type: String
+  SubDomain:
+    Type: String
+    Default: ideas
+Resources:
+  DNSZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+      Comment: !Ref DomainName
+  TLSCert:
+    Type: AWS::CertificateManager::Certificate
+    DependsOn: DNSZone
+    Properties:
+      DomainName: !Join 
+        - '.'
+        -
+          - !Ref SubDomain
+          - !Ref DomainName
+      ValidationMethod: DNS
+  Cdn:
+    Type: AWS::CloudFront::Distribution
+    DependsOn: DNSZone
+    Properties:
+      DistributionConfig:
+        Aliases:
+          -  !Join 
+            - '.'
+            -
+              - !Ref SubDomain
+              - !Ref DomainName
+        Origins:
+          - dynamic:
+              DomainName:
+                !ImportValue: HostingLoadBalancer
+          - static:
+              S3OriginConfig:
+                OriginAccessIdentity:
+                  cImportValue: HostingBucketId
+        ViewerCertificate:
+          AcmCertificateArn: !Ref TLSCert
+  CdnCname:
+    Type: AWS::Route53::RecordSet
+    DependsOn: Cdn
+    Properties:
+      AliasTarget:
+        DNSName:
+          -  !Join 
+            - '.'
+            -
+              - !Ref SubDomain
+              - !Ref DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+      HostedZoneId: !GetAtt DNSZone.Id
